@@ -14,7 +14,7 @@
 #define PLANE    2
 
 #define EPSILON 0.00001
-#define N_OBJECTS 100
+#define MAX_OBJECTS 100
 #define MAX_INTENSITY 255.0
 
 #define Ex 10.0 /* position of camera frame of reference */
@@ -70,7 +70,7 @@ typedef struct {
     color_t intensity ;
 } light_t ;
 
-object_t object[N_OBJECTS] ;
+object_t object[MAX_OBJECTS] ;
 int nobjects = 0 ;
 
 
@@ -315,14 +315,30 @@ color_t color_add(color_t c1, color_t c2) {
     return s ;
 }
 
-color_t shade(light_t *light, object_t *object, dmatrix_t *e, dmatrix_t *d, color_t color, color_t background, int level, int i, int j) {
+color_t shade(light_t *light,       //light object
+              object_t *object,     //array of ALL objects
+              dmatrix_t *e,         //the origin of viewing system expressed in world system
+              dmatrix_t *d,         //vector representing the current ray
+              color_t color,        //no idea what this is for ("old" colour?)
+              color_t background,   //colour of the background (why is this needed?)
+              int level,            //"closeness" to the near plane for occlusion - does higher level mean closer? seems to
+              int i, int j)         //coordinates of pixel (i,j)
+              {
+
+    //invocation: pixel = shade(&light,object,&Camera.E,&direction,pixel,background,2,i,j) ;
 
     /* main ray-tracing routine. given a ray, performs the following:
 
         for all objects in the scene {
             transforms the ray and the camera eye position with Minv of the object
             collects t values of ray intersection with generic object
+        }*/
+        //what is minv
+        for(int i=0; i < nobjects; i++) {
+
         }
+
+    /*
         if one or more intersections found {
             finds the intersection with minimum t value
             transforms the light with Minv
@@ -377,6 +393,8 @@ object_t *build_object(int object_type, dmatrix_t *M, color_t ambient_color, col
             break ;
     }
     nobjects++ ;
+    //is this ok? will it not be destroyed after return?
+    //object should be malloced
     return(&object) ;
 
 }

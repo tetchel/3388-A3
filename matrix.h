@@ -246,9 +246,9 @@ imatrix_t *imat_mult(imatrix_t *A, imatrix_t *B)
 
 
 matrix_t *mat_add(matrix_t *A, matrix_t *B)
-
-{ matrix_t *C ;
-  float s ;
+{
+    matrix_t *C ;
+//  float s ;
   int i, j ;
 
   if ((*A).l != (*B).l || (*A).c != (*B).c) {
@@ -269,7 +269,7 @@ matrix_t *mat_add(matrix_t *A, matrix_t *B)
 dmatrix_t *dmat_add(dmatrix_t *A, dmatrix_t *B)
 
 { dmatrix_t *C ;
-  double s ;
+//  double s ;
   int i, j ;
 
   if ((*A).l != (*B).l || (*A).c != (*B).c) {
@@ -290,7 +290,7 @@ dmatrix_t *dmat_add(dmatrix_t *A, dmatrix_t *B)
 imatrix_t *imat_add(imatrix_t *A, imatrix_t *B)
 
 { imatrix_t *C ;
-  int s ;
+//  int s ;
   int i, j ;
 
   if ((*A).l != (*B).l || (*A).c != (*B).c) {
@@ -312,7 +312,7 @@ imatrix_t *imat_add(imatrix_t *A, imatrix_t *B)
 matrix_t *mat_sub(matrix_t *A, matrix_t *B)
 
 { matrix_t *C ;
-  float s ;
+//  float s ;
   int i, j ;
 
   if ((*A).l != (*B).l || (*A).c != (*B).c) {
@@ -333,7 +333,7 @@ matrix_t *mat_sub(matrix_t *A, matrix_t *B)
 dmatrix_t *dmat_sub(dmatrix_t *A, dmatrix_t *B)
 
 { dmatrix_t *C ;
-  double s ;
+//  double s ;
   int i, j ;
 
   if ((*A).l != (*B).l || (*A).c != (*B).c) {
@@ -354,7 +354,7 @@ dmatrix_t *dmat_sub(dmatrix_t *A, dmatrix_t *B)
 imatrix_t *imat_sub(imatrix_t *A, imatrix_t *B)
 
 { imatrix_t *C ;
-  int s ;
+//  int s ;
   int i, j ;
 
   if ((*A).l != (*B).l || (*A).c != (*B).c) {
