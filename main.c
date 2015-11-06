@@ -17,9 +17,9 @@
 #define MAX_OBJECTS 100
 #define MAX_INTENSITY 255.0
 
-#define Ex 10.0 /* position of camera frame of reference */
-#define Ey 10.0
-#define Ez 10.0
+#define Ex 5.0 /* position of camera frame of reference */
+#define Ey 5.0
+#define Ez 5.0
 
 #define Gx 0.0 /* camera gaze direction */
 #define Gy 0.0
@@ -40,6 +40,8 @@
 #define ASPECT 1.5
 
 #define H 800 /* window height in pixels */
+
+#define DEBUG 1
 
 typedef struct {
     int width, height ;
@@ -70,7 +72,7 @@ typedef struct {
     color_t intensity ;
 } light_t ;
 
-object_t object[MAX_OBJECTS] ;
+object_t objects[MAX_OBJECTS] ;
 int nobjects = 0 ;
 
 
@@ -175,8 +177,34 @@ camera_t *build_camera(camera_t *Camera, window_t *Window) {
 }
 
 double sphere_intersection(dmatrix_t *e, dmatrix_t *d ) {
+            //a = d.x^2 + d.y^2 + d.z^2 (squared and then rooted, so these cancel out)
+    double  a = pow(d->m[1][1], 2) + pow(d->m[2][1], 2) + pow(d->m[3][1], 2),
+            //b = e dot d
+            b = dot_product(e, d),
+            //c is similar to a, but e instead of d, and subtract 1.
+            c = pow(e->m[1][1], 2) + pow(e->m[2][1], 2) + pow(e->m[3][1], 2) - 1;
 
-    return 0.0 ;
+    double discriminant = pow(b, 2) - a*c;
+    double t = -1, t2 = -1;
+
+    if(discriminant >= 0) {
+        t = -b/a + (sqrt(discriminant))/a,
+        t2 = -b/a - (sqrt(discriminant))/a;
+    }
+
+    if(t2 < t)
+        t = t2;
+
+    return t;
+}
+
+double plane_intersection(dmatrix_t *e, dmatrix_t *d) {
+    //doesn't intersect
+    if(d->m[3][1] == 0)
+        return -1;
+    //does intersect
+    else
+        return -(e->m[3][1] / d->m[3][1]);
 }
 
 dmatrix_t *intersection_coordinates(dmatrix_t *e, dmatrix_t *direction, double t) {
@@ -188,37 +216,24 @@ dmatrix_t *intersection_coordinates(dmatrix_t *e, dmatrix_t *direction, double t
     intersection = (dmatrix_t *)malloc(sizeof(dmatrix_t)) ;
     dmat_alloc(intersection,4,1) ;
 
-    /* intersection->m[1][1] = e->m[1][1] + direction->m[1][1]*t ;
+    intersection->m[1][1] = e->m[1][1] + direction->m[1][1]*t ;
     intersection->m[2][1] = e->m[2][1] + direction->m[2][1]*t ;
     intersection->m[3][1] = e->m[3][1] + direction->m[3][1]*t ;
-    intersection->m[4][1] = 1.0 ; */
+    intersection->m[4][1] = 1.0 ;
 
     return intersection ;
 }
 
-dmatrix_t *normal_to_surface(object_t *object, dmatrix_t *intersection) {
-
-    /* returns normal surface unit vector at intersection point */
-
-    dmatrix_t *normal ;
-
-    normal = (dmatrix_t *)malloc(sizeof(dmatrix_t)) ;
-    dmat_alloc(normal,4,1) ;
-
-    /* if ((*object).type == 1) {
-        normal->m[1][1] = intersection->m[1][1] ;
-        normal->m[2][1] = intersection->m[2][1] ;
-        normal->m[3][1] = intersection->m[3][1] ;
-        normal->m[4][1] = 0.0 ;
-    } */
-    return normal ;
-}
-
-int find_min_hit_time(double t0[N_OBJECTS]) {
+int find_min_hit_time(double t[MAX_OBJECTS]) {
 
     /* finds the smallest t value for an intersection with an object */
-
-    return 0 ;
+    int min = -1;
+    for(int i = 0; i < nobjects; i++) {
+        if(t[i] > 0 && (min == -1 || t[i] < t[min])) {
+            min = i;
+        }
+    }
+    return min;
 }
 
 dmatrix_t *ray_direction(camera_t *Camera, window_t *Window, double height, double width, int i, int j) {
@@ -254,6 +269,9 @@ dmatrix_t *vector_to_light_source(dmatrix_t *intersection, dmatrix_t *light_posi
     s = (dmatrix_t *)malloc(sizeof(dmatrix_t)) ;
     dmat_alloc(s,4,1) ;
 
+    s = dmat_sub(intersection, light_position);
+    s = dmat_normalize(s);
+
     return s ;
 }
 
@@ -266,7 +284,17 @@ dmatrix_t *vector_to_center_of_projection(dmatrix_t *intersection, dmatrix_t *e)
     v = (dmatrix_t *)malloc(sizeof(dmatrix_t)) ;
     dmat_alloc(v,4,1) ;
 
+    v = dmat_sub(intersection, e);
+    v = dmat_normalize(v);
+
     return v ;
+}
+
+dmatrix_t *multiply_by_scalar(dmatrix_t *m, double scalar) {
+    m->m[1][1] *= scalar;
+    m->m[2][1] *= scalar;
+    m->m[3][1] *= scalar;
+    return m;
 }
 
 dmatrix_t *vector_to_specular_reflection(dmatrix_t *N, dmatrix_t *S) {
@@ -277,6 +305,20 @@ dmatrix_t *vector_to_specular_reflection(dmatrix_t *N, dmatrix_t *S) {
 
     r = (dmatrix_t *)malloc(sizeof(dmatrix_t)) ;
     dmat_alloc(r,4,1) ;
+
+    dmatrix_t *neg_s = multiply_by_scalar(S, -1);
+//    neg_s.m[1][1] = -S.m[1][1];
+//    neg_s.m[2][1] = -S.m[2][1];
+//    neg_s.m[3][1] = -S.m[3][1];
+
+    double s_dot_n = dot_product(N, S);
+
+    double n_mag_squared = pow(N->m[1][1], 2) + pow(N->m[2][1], 2) + pow(N->m[3][1], 2);
+
+    dmatrix_t *left_side = multiply_by_scalar(N, 2*(s_dot_n / n_mag_squared));
+
+    r = dmat_add(neg_s, left_side);
+    r = dmat_normalize(r);
 
     return r ;
 
@@ -315,30 +357,37 @@ color_t color_add(color_t c1, color_t c2) {
     return s ;
 }
 
+dmatrix_t *get_normal(object_t *object, dmatrix_t *e, dmatrix_t *d, double t) {
+    dmatrix_t* n = (dmatrix_t *)malloc(sizeof(dmatrix_t));
+    dmat_alloc(n,4,1) ;
+
+    if(object->type == SPHERE)
+        n = intersection_coordinates(e,d,t);
+    else if(object->type == PLANE) {
+        n->m[1][1] = 0;
+        n->m[2][1] = 0;
+        n->m[3][1] = 1;
+        n->m[4][1] = 1;
+    }
+    return n;
+}
+
 color_t shade(light_t *light,       //light object
-              object_t *object,     //array of ALL objects
+              object_t *objects,     //array of ALL objects
               dmatrix_t *e,         //the origin of viewing system expressed in world system
               dmatrix_t *d,         //vector representing the current ray
-              color_t color,        //no idea what this is for ("old" colour?)
-              color_t background,   //colour of the background (why is this needed?)
+              color_t background,   //colour of the background
               int level,            //"closeness" to the near plane for occlusion - does higher level mean closer? seems to
               int i, int j)         //coordinates of pixel (i,j)
               {
 
-    //invocation: pixel = shade(&light,object,&Camera.E,&direction,pixel,background,2,i,j) ;
-
-    /* main ray-tracing routine. given a ray, performs the following:
+    //invocation: pixel = shade(&light,object,&Camera.E,&di rection,pixel,background,2,i,j) ;
+      /* main ray-tracing routine. given a ray, performs the following:
 
         for all objects in the scene {
             transforms the ray and the camera eye position with Minv of the object
             collects t values of ray intersection with generic object
-        }*/
-        //what is minv
-        for(int i=0; i < nobjects; i++) {
-
         }
-
-    /*
         if one or more intersections found {
             finds the intersection with minimum t value
             transforms the light with Minv
@@ -353,49 +402,100 @@ color_t shade(light_t *light,       //light object
             returns the R,G,B intensity of the pixel
      } */
 
-    color.r = 0.0 ;
-    color.g = 0.0 ;
-    color.b = 0.0 ;
+    color_t color = background;
+    double t_array[MAX_OBJECTS];
+    for(int i = 0; i < nobjects; i++) {
+        object_t *object = &objects[i];
+        dmatrix_t *e_trans = dmat_mult(&(object->Minv), e);
+        dmatrix_t *d_trans = dmat_mult(&(object->Minv), d);
+        t_array[i] = object->intersection_function(e_trans, d_trans);
+    }
+
+    int t_index = find_min_hit_time(t_array);
+    if(t_index != -1) {
+        double t = t_array[t_index];
+        object_t *object = &objects[t_index];
+
+        dmatrix_t *l_trans = dmat_mult(&(object->Minv), &(light->position));
+
+        dmatrix_t *rt0 = intersection_coordinates(e, d, t);
+        dmatrix_t *left_side = dmat_sub(l_trans, rt0);
+        double u = object->intersection_function(rt0, left_side);
+
+        int shadow = 0;
+        //thank you floating point error
+        if(u <= 1 && u >= 0.0000001) {
+            shadow = 1;
+        }
+
+        color_t diffuse, specular, ambient;
+
+        if(!shadow) {
+            //all of n, s, v, r are normalized in the functions that give them
+            dmatrix_t *n = get_normal(object, e, d, t);
+            dmatrix_t *s = vector_to_light_source(n, l_trans);
+            dmatrix_t *v = vector_to_center_of_projection(n, e);
+            dmatrix_t *r = vector_to_specular_reflection(n, s);
+            double diff = object->diffuse_coeff  * dot_product(n, s);
+            double spec = object->specular_coeff * pow(dot_product(v, r), object->f);
+
+            diffuse.r = (object->diffuse_color.r * light->intensity.r*diff)*MAX_INTENSITY;
+            diffuse.g = (object->diffuse_color.g * light->intensity.g*diff)*MAX_INTENSITY;
+            diffuse.b = (object->diffuse_color.b * light->intensity.b*diff)*MAX_INTENSITY;
+
+            specular.r = (object->specular_color.r * light->intensity.r*spec)*MAX_INTENSITY;
+            specular.g = (object->specular_color.g * light->intensity.g*spec)*MAX_INTENSITY;
+            specular.b = (object->specular_color.b * light->intensity.b*spec)*MAX_INTENSITY;
+        }
+
+        ambient.r = (object->ambient_color.r * object->ambient_coeff)*MAX_INTENSITY;
+        ambient.g = (object->ambient_color.g * object->ambient_coeff)*MAX_INTENSITY;
+        ambient.b = (object->ambient_color.b * object->ambient_coeff)*MAX_INTENSITY;
+
+        color = color_add(diffuse, specular);
+        color = color_add(color, ambient);
+    }
 
     return color ;
 }
 
 object_t *build_object(int object_type, dmatrix_t *M, color_t ambient_color, color_t diffuse_color, color_t specular_color, double ambient_coeff, double diffuse_coeff, double specular_coeff, double f, double reflectivity) {
 
-    object_t object ;
+    object_t *object = malloc(sizeof(object_t)) ;
 
-    object.M = *M ;
-    dmat_alloc(&object.Minv,4,4) ;
-    object.Minv = *dmat_inverse(&object.M) ;
+    object->M = *M ;
+    dmat_alloc(&object->Minv,4,4) ;
+    object->Minv = *dmat_inverse(&object->M) ;
 
-    object.reflectivity = reflectivity ;
+    object->reflectivity = reflectivity ;
 
-    object.specular_color.r = specular_color.r ;
-    object.specular_color.g = specular_color.g ;
-    object.specular_color.b = specular_color.b ;
-    object.specular_coeff = specular_coeff ;
-    object.f = f ;
+    object->specular_color.r = specular_color.r ;
+    object->specular_color.g = specular_color.g ;
+    object->specular_color.b = specular_color.b ;
+    object->specular_coeff = specular_coeff ;
+    object->f = f ;
 
-    object.diffuse_color.r = diffuse_color.r ;
-    object.diffuse_color.g = diffuse_color.g ;
-    object.diffuse_color.b = diffuse_color.b ;
-    object.diffuse_coeff = diffuse_coeff ;
+    object->diffuse_color.r = diffuse_color.r ;
+    object->diffuse_color.g = diffuse_color.g ;
+    object->diffuse_color.b = diffuse_color.b ;
+    object->diffuse_coeff = diffuse_coeff ;
 
-    object.ambient_color.r = ambient_color.r ;
-    object.ambient_color.g = ambient_color.g ;
-    object.ambient_color.b = ambient_color.b ;
-    object.ambient_coeff = ambient_coeff ;
+    object->ambient_color.r = ambient_color.r ;
+    object->ambient_color.g = ambient_color.g ;
+    object->ambient_color.b = ambient_color.b ;
+    object->ambient_coeff = ambient_coeff ;
 
     switch (object_type) {
 
-        case SPHERE :   object.type = SPHERE ;
-                        object.intersection_function = &sphere_intersection ;
-            break ;
+        case SPHERE:    object->type = SPHERE ;
+                        object->intersection_function = &sphere_intersection;
+                        break ;
+        case PLANE:     object->type = PLANE;
+                        object->intersection_function = &plane_intersection;
+                        break;
     }
     nobjects++ ;
-    //is this ok? will it not be destroyed after return?
-    //object should be malloced
-    return(&object) ;
+    return object ;
 
 }
 
@@ -446,31 +546,83 @@ int main() {
 
     /* Create a first sphere */
 
-     dmat_alloc(&M,4,4) ;
+    dmat_alloc(&M,4,4) ;
     M = *dmat_identity(&M) ;
 
-    M.m[1][4] = 0.0 ; /* sphere at center of the world coordinates */
-    M.m[2][4] = 0.0 ;
+    if(!DEBUG) {
+        printf("Enter how many spheres you would like to render: ");
+        int num_spheres;
+        scanf("%d", &num_spheres);
 
-    reflectivity = 0.2 ;
+        reflectivity = 0.2 ;
 
-    specular_color.r = 1.0 ;
-    specular_color.g = 1.0 ;
-    specular_color.b = 1.0 ;
-    specular_coeff = 0.4 ;
-    f = 10.0 ;
+        specular_color.r = 1.0 ;
+        specular_color.g = 1.0 ;
+        specular_color.b = 1.0 ;
+        specular_coeff = 0.4 ;
+        f = 10.0 ;
 
-    diffuse_color.r = 0.0 ;
-    diffuse_color.g = 0.0 ;
-    diffuse_color.b = 1.0 ;
-    diffuse_coeff = 0.4 ;
+        diffuse_color.r = 1.0 ;
+        diffuse_color.g = 1.0 ;
+        diffuse_color.b = 1.0 ;
+        diffuse_coeff = 0.4 ;
 
-    ambient_color.r = 0.0 ;
-    ambient_color.g = 0.0 ;
-    ambient_color.b = 1.0 ;
+        ambient_coeff = 0.2 ;
+
+        for(int i = 0; i < num_spheres; i++) {
+            double r, g, b;
+            printf("Enter x position of sphere %d: ", i);
+            scanf("%lf", &M.m[1][4]);
+            printf("Enter y position of sphere %d: ", i);
+            scanf("%lf", &M.m[2][4]);
+            printf("Enter z position of sphere %d: ", i);
+            scanf("%lf", &M.m[3][4]);
+            printf("Enter ambient red of sphere %d: ", i);
+            scanf("%lf", &r);
+            printf("Enter ambient green of sphere %d: ", i);
+            scanf("%lf", &g);
+            printf("Enter ambient blue of sphere %d: ", i);
+            scanf("%lf", &b);
+
+            objects[i] = *build_object(SPHERE,&M,ambient_color,diffuse_color,specular_color,ambient_coeff,diffuse_coeff,specular_coeff,f,reflectivity);
+        }
+    }
+
+    else {
+        M.m[1][4] = 0.0 ; /* sphere at center of the world coordinates */
+        M.m[2][4] = 0.0 ;
+        M.m[3][4] = 1;
+
+        reflectivity = 0.2 ;
+
+        specular_color.r = 1.0 ;
+        specular_color.g = 1.0 ;
+        specular_color.b = 1.0 ;
+        specular_coeff = 0.4 ;
+        f = 10.0 ;
+
+        diffuse_color.r = 1.0 ;
+        diffuse_color.g = 1.0 ;
+        diffuse_color.b = 1.0 ;
+        diffuse_coeff = 0.4 ;
+
+        ambient_color.r = 1.0 ;
+        ambient_color.g = 0.1 ;
+        ambient_color.b = 0.1 ;
+        ambient_coeff = 0.2 ;
+
+        objects[nobjects] = *build_object(SPHERE,&M,ambient_color,diffuse_color,specular_color,ambient_coeff,diffuse_coeff,specular_coeff,f,reflectivity) ;
+    }
+
+    M = *dmat_identity(&M) ;
+    M.m[3][4] = 0.0 ;           //plane at z = 0
+
+    ambient_color.r = 0.9 ;
+    ambient_color.g = 0.8 ;
+    ambient_color.b = 0.05 ;
     ambient_coeff = 0.2 ;
 
-    object[nobjects] = *build_object(SPHERE,&M,ambient_color,diffuse_color,specular_color,ambient_coeff,diffuse_coeff,specular_coeff,f,reflectivity) ;
+    objects[nobjects] = *build_object(PLANE,&M,ambient_color,diffuse_color,specular_color,ambient_coeff,diffuse_coeff,specular_coeff,f,reflectivity) ;
 
     /* Set near plane dimensions */
 
@@ -493,14 +645,22 @@ int main() {
             for (i = 0 ; i < Window.width ; i++) {
                 for (j = 0  ; j < Window.height ; j++) {
                     direction = *ray_direction(&Camera,&Window,height,width,i,j) ;
-                    pixel = shade(&light,object,&Camera.E,&direction,pixel,background,2,i,j) ;
+                    pixel = shade(&light,objects,&Camera.E,&direction,background,2,i,j) ;
                     SetCurrentColorX(d,&(DefaultGC(d,s)),(int)pixel.r,(int)pixel.g,(int)pixel.b) ;
                     SetPixelX(d,w,s,i,Window.height - (j + 1)) ;
                 }
             }
         }
-        if (e.type == KeyPress)
-            break ;
+        if (e.type == KeyPress) {
+            //causes the program to exit when 'q' is pressed
+        	char c[255];
+        	KeySym key;
+        	//gives a warning (implicit declaration of XLookupString), but it works
+        	if(XLookupString(&e.xkey, c, 255, &key)) {
+        		if(c[0] == 'q')
+        			break;
+        	}
+        }
         if (e.type == ClientMessage)
             break ;
     }

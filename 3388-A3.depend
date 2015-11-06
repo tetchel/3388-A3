@@ -14,3 +14,18 @@
 	<stdio.h>
 	<stdlib.h>
 
+1446853396 source:/home/tim/programs/3388/3388-A3/3388-A3/main.c
+	<X11/Xlib.h>
+	<math.h>
+	<stdio.h>
+	<stdlib.h>
+	"matrix.h"
+
+1446609195 /home/tim/programs/3388/3388-A3/3388-A3/matrix.h
+	"nr.h"
+	<math.h>
+
+1446233926 /home/tim/programs/3388/3388-A3/3388-A3/nr.h
+	<stdio.h>
+	<stdlib.h>
+
