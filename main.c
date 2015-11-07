@@ -1,5 +1,7 @@
 
-/*            PURPOSE : Simple framework for ray-tracing
+/*      PURPOSE : Renders any number of 3D, ray traced spheres with shading and shadowing on top of a plane.
+        AUTHOR: S. Beauchemin, Tim Etchells
+        DATE: 6/11/2015
 
         PREREQUISITES : matrix.h
  */
@@ -176,6 +178,7 @@ camera_t *build_camera(camera_t *Camera, window_t *Window) {
     return(Camera) ;
 }
 
+//returns the t-value at which the given ray intersects a generic sphere
 double sphere_intersection(dmatrix_t *e, dmatrix_t *d ) {
             //a = d.x^2 + d.y^2 + d.z^2 (squared and then rooted, so these cancel out)
     double  a = pow(d->m[1][1], 2) + pow(d->m[2][1], 2) + pow(d->m[3][1], 2),
@@ -198,6 +201,7 @@ double sphere_intersection(dmatrix_t *e, dmatrix_t *d ) {
     return t;
 }
 
+//returns the t-value at which the given ray intersects a generic plane
 double plane_intersection(dmatrix_t *e, dmatrix_t *d) {
     //doesn't intersect
     if(d->m[3][1] == 0)
@@ -207,10 +211,8 @@ double plane_intersection(dmatrix_t *e, dmatrix_t *d) {
         return -(e->m[3][1] / d->m[3][1]);
 }
 
+//returns a vector representing the intersection point, given a t value for an intersection of an object with the ray
 dmatrix_t *intersection_coordinates(dmatrix_t *e, dmatrix_t *direction, double t) {
-
-    /* returns the 3D intersection point, given a t value for an intersection of an object with the ray */
-
     dmatrix_t *intersection ;
 
     intersection = (dmatrix_t *)malloc(sizeof(dmatrix_t)) ;
@@ -224,11 +226,12 @@ dmatrix_t *intersection_coordinates(dmatrix_t *e, dmatrix_t *direction, double t
     return intersection ;
 }
 
+//returns the smallest t value for an i ntersection with an object
 int find_min_hit_time(double t[MAX_OBJECTS]) {
-
-    /* finds the smallest t value for an intersection with an object */
+    //index of smallest t-value
     int min = -1;
     for(int i = 0; i < nobjects; i++) {
+        //if t[i] is nonnegative and it's a smaller value, it's the new minimum
         if(t[i] > 0 && (min == -1 || t[i] < t[min])) {
             min = i;
         }
@@ -260,9 +263,8 @@ dmatrix_t *ray_direction(camera_t *Camera, window_t *Window, double height, doub
     return(d) ;
 }
 
+//returns a unit vector to light source at intersection point
 dmatrix_t *vector_to_light_source(dmatrix_t *intersection, dmatrix_t *light_position) {
-
-    /* returns a unit vector to light source at intersection point */
 
     dmatrix_t *s ;
 
@@ -275,10 +277,8 @@ dmatrix_t *vector_to_light_source(dmatrix_t *intersection, dmatrix_t *light_posi
     return s ;
 }
 
+//returns a unit vector to origin of camera frame of reference at intersection point
 dmatrix_t *vector_to_center_of_projection(dmatrix_t *intersection, dmatrix_t *e) {
-
-    /* returns a unit vector to origin of camera frame of reference at intersection point */
-
     dmatrix_t *v ;
 
     v = (dmatrix_t *)malloc(sizeof(dmatrix_t)) ;
@@ -290,6 +290,7 @@ dmatrix_t *vector_to_center_of_projection(dmatrix_t *intersection, dmatrix_t *e)
     return v ;
 }
 
+//multiplies elements in given 3D vector by given scalar
 dmatrix_t *multiply_by_scalar(dmatrix_t *m, double scalar) {
     m->m[1][1] *= scalar;
     m->m[2][1] *= scalar;
@@ -297,19 +298,14 @@ dmatrix_t *multiply_by_scalar(dmatrix_t *m, double scalar) {
     return m;
 }
 
+//returns a unit vector in the direction of the specular reflection given a surface normal and a light source
 dmatrix_t *vector_to_specular_reflection(dmatrix_t *N, dmatrix_t *S) {
-
-    /* returns a unit vector in the direction of the specular reflection given a surface normal and a light source */
-
     dmatrix_t *r ;
 
     r = (dmatrix_t *)malloc(sizeof(dmatrix_t)) ;
     dmat_alloc(r,4,1) ;
 
     dmatrix_t *neg_s = multiply_by_scalar(S, -1);
-//    neg_s.m[1][1] = -S.m[1][1];
-//    neg_s.m[2][1] = -S.m[2][1];
-//    neg_s.m[3][1] = -S.m[3][1];
 
     double s_dot_n = dot_product(N, S);
 
@@ -371,9 +367,27 @@ dmatrix_t *get_normal(object_t *object, dmatrix_t *e, dmatrix_t *d, double t) {
     }
     return n;
 }
+/* main ray-tracing routine. given a ray, performs the following:
 
+for all objects in the scene {
+    transforms the ray and the camera eye position with Minv of the object
+    collects t values of ray intersection with generic object
+}
+if one or more intersections found {
+    finds the intersection with minimum t value
+    transforms the light with Minv
+    computes the coordinates of the intersection
+    using the coordinates of the intersection {
+        computes the unit surface normal vector
+        computes unit vector to center of the camera
+        computes unit vector to light source
+        computes vector of specular reflection
+    }
+    computes specular, diffuse, and ambient light components
+    returns the R,G,B intensity of the pixel
+} */
 color_t shade(light_t *light,       //light object
-              object_t *objects,     //array of ALL objects
+              object_t *objects,    //array of ALL objects
               dmatrix_t *e,         //the origin of viewing system expressed in world system
               dmatrix_t *d,         //vector representing the current ray
               color_t background,   //colour of the background
@@ -381,47 +395,33 @@ color_t shade(light_t *light,       //light object
               int i, int j)         //coordinates of pixel (i,j)
               {
 
-    //invocation: pixel = shade(&light,object,&Camera.E,&di rection,pixel,background,2,i,j) ;
-      /* main ray-tracing routine. given a ray, performs the following:
-
-        for all objects in the scene {
-            transforms the ray and the camera eye position with Minv of the object
-            collects t values of ray intersection with generic object
-        }
-        if one or more intersections found {
-            finds the intersection with minimum t value
-            transforms the light with Minv
-            computes the coordinates of the intersection
-            using the coordinates of the intersection {
-                computes the unit surface normal vector
-                computes unit vector to center of the camera
-                computes unit vector to light source
-                computes vector of specular reflection
-            }
-            computes specular, diffuse, and ambient light components
-            returns the R,G,B intensity of the pixel
-     } */
-
     color_t color = background;
+    //array of t-value when ray intersects object
     double t_array[MAX_OBJECTS];
+    //collect t-values of intersection
     for(int i = 0; i < nobjects; i++) {
         object_t *object = &objects[i];
+        //tranform the ray
         dmatrix_t *e_trans = dmat_mult(&(object->Minv), e);
         dmatrix_t *d_trans = dmat_mult(&(object->Minv), d);
+        //get the intersection
         t_array[i] = object->intersection_function(e_trans, d_trans);
     }
 
     int t_index = find_min_hit_time(t_array);
+    //if there is an intersection with an object
     if(t_index != -1) {
         double t = t_array[t_index];
         object_t *object = &objects[t_index];
-
+        //tranform light
         dmatrix_t *l_trans = dmat_mult(&(object->Minv), &(light->position));
 
+        //compute shadow ray (from equation in notes)
         dmatrix_t *rt0 = intersection_coordinates(e, d, t);
         dmatrix_t *left_side = dmat_sub(l_trans, rt0);
         double u = object->intersection_function(rt0, left_side);
 
+        //1 if the current pixel is in shadow
         int shadow = 0;
         //thank you floating point error
         if(u <= 1 && u >= 0.0000001) {
@@ -430,15 +430,18 @@ color_t shade(light_t *light,       //light object
 
         color_t diffuse, specular, ambient;
 
+        //if not in shadow
         if(!shadow) {
             //all of n, s, v, r are normalized in the functions that give them
             dmatrix_t *n = get_normal(object, e, d, t);
             dmatrix_t *s = vector_to_light_source(n, l_trans);
             dmatrix_t *v = vector_to_center_of_projection(n, e);
             dmatrix_t *r = vector_to_specular_reflection(n, s);
+            //calculate diffuse, specular reflection coefficients
             double diff = object->diffuse_coeff  * dot_product(n, s);
             double spec = object->specular_coeff * pow(dot_product(v, r), object->f);
 
+            //set diffuse, specular rgb values
             diffuse.r = (object->diffuse_color.r * light->intensity.r*diff)*MAX_INTENSITY;
             diffuse.g = (object->diffuse_color.g * light->intensity.g*diff)*MAX_INTENSITY;
             diffuse.b = (object->diffuse_color.b * light->intensity.b*diff)*MAX_INTENSITY;
@@ -446,6 +449,15 @@ color_t shade(light_t *light,       //light object
             specular.r = (object->specular_color.r * light->intensity.r*spec)*MAX_INTENSITY;
             specular.g = (object->specular_color.g * light->intensity.g*spec)*MAX_INTENSITY;
             specular.b = (object->specular_color.b * light->intensity.b*spec)*MAX_INTENSITY;
+        }
+        else {
+            diffuse.r = 0;
+            diffuse.g = 0;
+            diffuse.b = 0;
+
+            specular.r = 0;
+            specular.g = 0;
+            specular.b = 0;
         }
 
         ambient.r = (object->ambient_color.r * object->ambient_coeff)*MAX_INTENSITY;
@@ -549,6 +561,8 @@ int main() {
     dmat_alloc(&M,4,4) ;
     M = *dmat_identity(&M) ;
 
+    //prompt user to set up spheres
+    //don't pick spec/diffuse colours, that takes too long...
     if(!DEBUG) {
         printf("Enter how many spheres you would like to render: ");
         int num_spheres;
